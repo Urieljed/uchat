@@ -1,38 +1,382 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#6c63ff" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="uChat" />
-  <meta name="description" content="uChat - Votre messagerie privée" />
-  <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="manifest" href="/manifest.json" />
-  <title>uChat</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#0e0f13;overflow:hidden;-webkit-tap-highlight-color:transparent}
-    @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes msgIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
-    @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
-    ::-webkit-scrollbar{width:3px}
-    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#6c63ff"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="uChat"/>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/icon-192.png"/>
+<title>uChat</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0e0f13;font-family:'DM Sans',sans-serif;color:#f0f0f5;height:100vh;overflow:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+input,button{font-family:'DM Sans',sans-serif}
+button:focus,input:focus{outline:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(reg => {
-          console.log('SW registered');
-        }).catch(err => console.log('SW error:', err));
+<div id="root"></div>
+<script>
+// Firebase config
+firebase.initializeApp({
+  apiKey: "AIzaSyDTIVbRCIlxU3OsayOxD-LwjjzTd5ovT48",
+  authDomain: "uchat-fc773.firebaseapp.com",
+  projectId: "uchat-fc773",
+  storageBucket: "uchat-fc773.firebasestorage.app",
+  messagingSenderId: "99707957796",
+  appId: "1:99707957796:web:53770d478b9c59cf559eb1"
+});
+const auth = firebase.auth();
+const db = firebase.firestore();
+</script>
+<script type="text/babel">
+const {useState,useEffect,useRef} = React;
+
+const AVATARS=["🌺","⚡","🌙","🎵","🎉","🚀","🔥","💡","🌊","🦋","🌸","🎯"];
+const COLORS=["#2d1b4e","#1a1a2e","#2e1a0e","#2e0e1a","#1a2e1a","#0e2e1a","#2e2a0e","#0e1a2e"];
+const nowTime=()=>new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+const convId=(a,b)=>[a,b].sort().join("_");
+const randAv=()=>AVATARS[Math.floor(Math.random()*AVATARS.length)];
+const randCol=()=>COLORS[Math.floor(Math.random()*COLORS.length)];
+
+function Av({av,col,online,sz=44}){
+  return <div style={{position:"relative",width:sz,height:sz,flexShrink:0}}>
+    <div style={{width:sz,height:sz,borderRadius:sz>=40?13:10,background:col||"#252830",display:"flex",alignItems:"center",justifyContent:"center",fontSize:sz*0.45}}>{av||"👤"}</div>
+    {online&&<div style={{width:11,height:11,background:"#22c55e",border:"2.5px solid #0e0f13",borderRadius:"50%",position:"absolute",bottom:-1,right:-1}}/>}
+  </div>;
+}
+
+function AuthScreen(){
+  const [mode,setMode]=useState("login");
+  const [name,setName]=useState("");
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const handle=async()=>{
+    if(!email||!pass)return setError("Remplis tous les champs.");
+    setLoading(true);setError("");
+    try{
+      if(mode==="register"){
+        if(!name)return setError("Entre ton nom.");
+        const cred=await auth.createUserWithEmailAndPassword(email,pass);
+        await cred.user.updateProfile({displayName:name});
+        await db.collection("users").doc(cred.user.uid).set({
+          uid:cred.user.uid,name,email,avatar:randAv(),color:randCol(),online:true,createdAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }else{
+        await auth.signInWithEmailAndPassword(email,pass);
+      }
+    }catch(e){
+      const msgs={"auth/email-already-in-use":"Email déjà utilisé.","auth/weak-password":"Mot de passe trop court (6 car. min).","auth/user-not-found":"Compte introuvable.","auth/wrong-password":"Mot de passe incorrect.","auth/invalid-credential":"Email ou mot de passe incorrect."};
+      setError(msgs[e.code]||e.message);
+    }finally{setLoading(false);}
+  };
+
+  const inp=(label,val,set,ph,type="text")=><div style={{marginBottom:14}}>
+    <label style={{fontSize:12,color:"#9899a8",fontWeight:500,display:"block",marginBottom:6}}>{label}</label>
+    <input type={type} value={val} onChange={e=>set(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handle()} placeholder={ph}
+      style={{width:"100%",padding:"10px 14px",background:"#1e2028",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,color:"#f0f0f5",fontSize:14,outline:"none"}}/>
+  </div>;
+
+  return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0e0f13"}}>
+    <div style={{background:"#16181f",border:"1px solid rgba(255,255,255,0.08)",borderRadius:24,padding:"38px 34px",width:370,maxWidth:"92vw",animation:"fadeUp .35s ease"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:28}}>
+        <div style={{width:38,height:38,background:"#6c63ff",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>💬</div>
+        <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:21,color:"#f0f0f5"}}>u<span style={{color:"#9b8ffd"}}>Chat</span></span>
+      </div>
+      <h2 style={{color:"#f0f0f5",fontWeight:600,fontSize:20,marginBottom:6}}>{mode==="login"?"Bienvenue 👋":"Créer un compte"}</h2>
+      <p style={{color:"#9899a8",fontSize:13,marginBottom:22}}>{mode==="login"?"Connecte-toi à uChat":"Rejoins la communauté uChat"}</p>
+      {mode==="register"&&inp("Nom complet",name,setName,"Ex: Amara Diallo")}
+      {inp("Email",email,setEmail,"toi@email.com","email")}
+      {inp("Mot de passe",pass,setPass,"••••••••","password")}
+      {error&&<p style={{color:"#ef4444",fontSize:12,marginBottom:10}}>⚠️ {error}</p>}
+      <button onClick={handle} disabled={loading}
+        style={{width:"100%",padding:"12px",background:loading?"#4a45b0":"#6c63ff",border:"none",borderRadius:12,color:"#fff",fontWeight:600,fontSize:15,cursor:loading?"default":"pointer"}}>
+        {loading?"Chargement…":mode==="login"?"Se connecter →":"Créer le compte →"}
+      </button>
+      <p style={{textAlign:"center",color:"#9899a8",fontSize:13,marginTop:14}}>
+        {mode==="login"?"Pas encore de compte ? ":"Déjà un compte ? "}
+        <span onClick={()=>{setMode(m=>m==="login"?"register":"login");setError("");}} style={{color:"#9b8ffd",cursor:"pointer",fontWeight:500}}>
+          {mode==="login"?"S'inscrire":"Se connecter"}
+        </span>
+      </p>
+    </div>
+  </div>;
+}
+
+function NewConvModal({currentUid,onClose,onOpen}){
+  const [q,setQ]=useState("");
+  const [results,setResults]=useState([]);
+  const search=async(val)=>{
+    setQ(val);
+    if(val.length<2)return setResults([]);
+    const snap=await db.collection("users").get();
+    setResults(snap.docs.map(d=>d.data()).filter(u=>u.uid!==currentUid&&(u.name.toLowerCase().includes(val.toLowerCase())||u.email.toLowerCase().includes(val.toLowerCase()))));
+  };
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:80}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#16181f",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:24,width:340,maxWidth:"90vw"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <span style={{fontWeight:600,fontSize:15}}>Nouvelle conversation</span>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#9899a8",cursor:"pointer",fontSize:18}}>✕</button>
+      </div>
+      <input value={q} onChange={e=>search(e.target.value)} placeholder="Chercher par nom ou email…" autoFocus
+        style={{width:"100%",padding:"10px 14px",background:"#1e2028",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,color:"#f0f0f5",fontSize:14,outline:"none",marginBottom:12}}/>
+      {results.map(u=><div key={u.uid} onClick={()=>{onOpen(u);onClose();}}
+        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 8px",borderRadius:10,cursor:"pointer"}}
+        onMouseOver={ev=>ev.currentTarget.style.background="#1e2028"}
+        onMouseOut={ev=>ev.currentTarget.style.background="none"}>
+        <Av av={u.avatar} col={u.color} sz={38}/>
+        <div>
+          <div style={{fontSize:14,fontWeight:500}}>{u.name}</div>
+          <div style={{fontSize:12,color:"#9899a8"}}>{u.email}</div>
+        </div>
+      </div>)}
+      {q.length>=2&&results.length===0&&<p style={{color:"#9899a8",fontSize:13,textAlign:"center",padding:"10px 0"}}>Aucun utilisateur trouvé</p>}
+    </div>
+  </div>;
+}
+
+function ChatApp({user,profile}){
+  const [convs,setConvs]=useState([]);
+  const [activeId,setActiveId]=useState(null);
+  const [activeOther,setActiveOther]=useState(null);
+  const [msgs,setMsgs]=useState([]);
+  const [txt,setTxt]=useState("");
+  const [search,setSearch]=useState("");
+  const [showNew,setShowNew]=useState(false);
+  const [reacting,setReacting]=useState(null);
+  const [imgModal,setImgModal]=useState(null);
+  const endRef=useRef(null);
+  const inputRef=useRef(null);
+  const fileRef=useRef(null);
+
+  useEffect(()=>{
+    const unsub=db.collection("conversations").where("members","array-contains",user.uid)
+      .onSnapshot(async snap=>{
+        const list=await Promise.all(snap.docs.map(async d=>{
+          const data=d.data();
+          const otherId=data.members.find(m=>m!==user.uid);
+          let other={};
+          if(otherId){const us=await db.collection("users").doc(otherId).get();if(us.exists)other=us.data();}
+          return{id:d.id,...data,other};
+        }));
+        list.sort((a,b)=>(b.lastTime?.seconds||0)-(a.lastTime?.seconds||0));
+        setConvs(list);
       });
-    }
-  </script>
+    return unsub;
+  },[user.uid]);
+
+  useEffect(()=>{
+    if(!activeId)return;
+    const unsub=db.collection("conversations").doc(activeId).collection("messages")
+      .orderBy("createdAt","asc").onSnapshot(snap=>setMsgs(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return unsub;
+  },[activeId]);
+
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"})},[msgs.length]);
+
+  const openConv=async(other)=>{
+    const cid=convId(user.uid,other.uid);
+    const ref=db.collection("conversations").doc(cid);
+    const snap=await ref.get();
+    if(!snap.exists)await ref.set({members:[user.uid,other.uid],lastMsg:"",lastTime:firebase.firestore.FieldValue.serverTimestamp()});
+    setActiveId(cid);setActiveOther(other);
+    setTimeout(()=>inputRef.current?.focus(),100);
+  };
+
+  const sendMsg=async(content,type="text",extra={})=>{
+    if(!content.trim()&&type==="text")return;
+    setTxt("");
+    await db.collection("conversations").doc(activeId).collection("messages").add({
+      from:user.uid,text:content,type,createdAt:firebase.firestore.FieldValue.serverTimestamp(),...extra
+    });
+    await db.collection("conversations").doc(activeId).update({
+      lastMsg:type==="text"?content:"📎 Fichier",lastTime:firebase.firestore.FieldValue.serverTimestamp()
+    });
+  };
+
+  const handleFile=async(e)=>{
+    const f=e.target.files[0];if(!f)return;
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      if(f.type.startsWith("image/"))await sendMsg(f.name,"image",{url:ev.target.result});
+      else await sendMsg(f.name,"file",{size:(f.size/1024).toFixed(0)+" KB"});
+    };
+    reader.readAsDataURL(f);
+    e.target.value="";
+  };
+
+  const addReaction=async(mid,em)=>{
+    await db.collection("conversations").doc(activeId).collection("messages").doc(mid).update({reaction:em});
+    setReacting(null);
+  };
+
+  const formatTime=(ts)=>{
+    if(!ts)return nowTime();
+    const d=ts.toDate?ts.toDate():new Date(ts.seconds*1000);
+    return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  };
+
+  const filtered=convs.filter(c=>!search||c.other?.name?.toLowerCase().includes(search.toLowerCase()));
+
+  return <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:"100%",height:"100vh"}}>
+    {imgModal&&<div onClick={()=>setImgModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
+      <img src={imgModal} alt="" style={{maxWidth:"88vw",maxHeight:"88vh",borderRadius:12}}/>
+    </div>}
+    {showNew&&<NewConvModal currentUid={user.uid} onClose={()=>setShowNew(false)} onOpen={openConv}/>}
+
+    <div style={{width:"100%",maxWidth:1000,height:"96vh",background:"#16181f",borderRadius:20,border:"1px solid rgba(255,255,255,0.08)",display:"flex",overflow:"hidden"}}>
+      {/* Sidebar */}
+      <div style={{width:295,minWidth:260,background:"#16181f",borderRight:"1px solid rgba(255,255,255,0.06)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 14px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{width:34,height:34,background:"#6c63ff",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>💬</div>
+            <span style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:19,color:"#f0f0f5"}}>u<span style={{color:"#9b8ffd"}}>Chat</span></span>
+          </div>
+          <button onClick={()=>setShowNew(true)} style={{width:30,height:30,borderRadius:8,background:"#6c63ff",border:"none",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:9,padding:"6px 14px 12px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+          <Av av={profile?.avatar} col={profile?.color} sz={34} online={true}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#f0f0f5"}}>{profile?.name||user.displayName||"Moi"}</div>
+            <div style={{fontSize:11,color:"#22c55e"}}>En ligne</div>
+          </div>
+          <button onClick={()=>auth.signOut()} style={{fontSize:11,color:"#9899a8",background:"rgba(255,255,255,0.05)",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>Déco</button>
+        </div>
+        <div style={{margin:"10px 12px 8px",background:"#1e2028",border:"1px solid rgba(255,255,255,0.06)",borderRadius:10,display:"flex",alignItems:"center",gap:7,padding:"0 11px"}}>
+          <span style={{fontSize:13,opacity:.7}}>🔍</span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
+            style={{background:"none",border:"none",color:"#f0f0f5",fontSize:13,width:"100%",padding:"7px 0",outline:"none"}}/>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"0 7px"}}>
+          {filtered.length===0&&<div style={{textAlign:"center",padding:"30px 16px"}}>
+            <div style={{fontSize:32,marginBottom:10}}>💬</div>
+            <p style={{color:"#5c5d70",fontSize:13,marginBottom:10}}>Aucune conversation</p>
+            <button onClick={()=>setShowNew(true)} style={{background:"rgba(108,99,255,0.2)",border:"1px solid rgba(108,99,255,0.3)",borderRadius:8,color:"#9b8ffd",padding:"6px 14px",fontSize:12,cursor:"pointer"}}>✏️ Démarrer</button>
+          </div>}
+          {filtered.map(c=><div key={c.id} onClick={()=>{setActiveId(c.id);setActiveOther(c.other);}}
+            style={{display:"flex",alignItems:"center",gap:10,padding:"8px 9px",borderRadius:12,cursor:"pointer",marginBottom:2,
+              background:activeId===c.id?"rgba(108,99,255,0.14)":"none",
+              border:activeId===c.id?"1px solid rgba(108,99,255,0.2)":"1px solid transparent",transition:"all .12s"}}
+            onMouseOver={ev=>{if(activeId!==c.id)ev.currentTarget.style.background="#1e2028";}}
+            onMouseOut={ev=>{if(activeId!==c.id)ev.currentTarget.style.background="none";}}>
+            <Av av={c.other?.avatar} col={c.other?.color} sz={42} online={c.other?.online}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                <span style={{fontWeight:500,fontSize:13,color:"#f0f0f5"}}>{c.other?.name||"..."}</span>
+                <span style={{fontSize:10,color:"#5c5d70"}}>{formatTime(c.lastTime)}</span>
+              </div>
+              <span style={{fontSize:12,color:"#9899a8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block",maxWidth:180}}>{c.lastMsg||"Démarrer la conversation"}</span>
+            </div>
+          </div>)}
+        </div>
+      </div>
+
+      {/* Main */}
+      {!activeId?<div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,opacity:.4}}>
+        <div style={{fontSize:48}}>💬</div>
+        <p style={{color:"#9899a8",fontSize:14}}>Sélectionnez une conversation</p>
+        <button onClick={()=>setShowNew(true)} style={{background:"none",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:"#9899a8",padding:"7px 16px",fontSize:13,cursor:"pointer"}}>✏️ Nouvelle conversation</button>
+      </div>:
+      <div style={{flex:1,display:"flex",flexDirection:"column",background:"#0e0f13",overflow:"hidden"}}>
+        <div style={{padding:"12px 16px",background:"#16181f",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:11}}>
+          <Av av={activeOther?.avatar} col={activeOther?.color} sz={40} online={activeOther?.online}/>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:15,fontFamily:"'Space Grotesk',sans-serif",color:"#f0f0f5"}}>{activeOther?.name}</div>
+            <div style={{fontSize:12,color:activeOther?.online?"#22c55e":"#9899a8"}}>{activeOther?.online?"En ligne":"Hors ligne"}</div>
+          </div>
+          {[["📹","Appel vidéo"],["📞","Appel audio"]].map(([ic,tip])=>
+            <button key={ic} title={tip} style={{width:31,height:31,borderRadius:9,background:"#1e2028",border:"1px solid rgba(255,255,255,0.06)",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+          )}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:2}} onClick={()=>setReacting(null)}>
+          {msgs.length===0&&<div style={{textAlign:"center",opacity:.4,marginTop:40}}>
+            <div style={{fontSize:36,marginBottom:8}}>👋</div>
+            <p style={{color:"#9899a8",fontSize:13}}>Dis bonjour à {activeOther?.name} !</p>
+          </div>}
+          {msgs.map(msg=>{
+            const sent=msg.from===user.uid;
+            const timeStr=formatTime(msg.createdAt);
+            return <div key={msg.id} style={{display:"flex",flexDirection:sent?"row-reverse":"row",alignItems:"flex-end",gap:7,marginBottom:2,animation:"msgIn .2s ease"}}>
+              {!sent&&<Av av={activeOther?.avatar} col={activeOther?.color} sz={24}/>}
+              <div style={{maxWidth:"60%",position:"relative"}} onMouseEnter={()=>setReacting(msg.id)} onMouseLeave={()=>setReacting(null)}>
+                {reacting===msg.id&&<div style={{position:"absolute",bottom:"100%",left:sent?"auto":0,right:sent?0:"auto",marginBottom:6,background:"#1e2028",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:"5px 9px",display:"flex",gap:4,zIndex:10}}>
+                  {["👍","❤️","😂","😮","🔥","👏"].map(e=><button key={e} onClick={()=>addReaction(msg.id,e)}
+                    style={{fontSize:16,background:"none",border:"none",cursor:"pointer"}}>{e}</button>)}
+                </div>}
+                <div style={{padding:msg.type==="image"?"4px 4px 8px":"9px 13px",borderRadius:14,
+                  borderBottomRightRadius:sent?4:14,borderBottomLeftRadius:sent?14:4,
+                  background:sent?"#6c63ff":"#1e2028",border:sent?"none":"1px solid rgba(255,255,255,0.06)",color:"#f0f0f5",position:"relative"}}>
+                  {msg.type==="image"&&<img src={msg.url} onClick={()=>setImgModal(msg.url)} alt="" style={{maxWidth:200,maxHeight:170,borderRadius:10,display:"block",cursor:"pointer",objectFit:"cover"}}/>}
+                  {msg.type==="file"&&<a href={msg.url||"#"} style={{display:"flex",alignItems:"center",gap:8,textDecoration:"none"}}>
+                    <span style={{fontSize:22}}>📄</span>
+                    <div><div style={{fontSize:13,fontWeight:500,color:"#f0f0f5"}}>{msg.text}</div><div style={{fontSize:11,opacity:.7}}>{msg.size}</div></div>
+                  </a>}
+                  {(!msg.type||msg.type==="text")&&<span style={{fontSize:13.5,lineHeight:1.5}}>{msg.text}</span>}
+                  <div style={{fontSize:10,marginTop:4,opacity:.65,display:"flex",alignItems:"center",justifyContent:sent?"flex-end":"flex-start",gap:3}}>{timeStr}</div>
+                  {msg.reaction&&<div style={{position:"absolute",bottom:-10,right:sent?8:"auto",left:sent?"auto":8,fontSize:15,background:"#16181f",borderRadius:20,padding:"1px 5px",border:"1px solid rgba(255,255,255,0.08)"}}>{msg.reaction}</div>}
+                </div>
+              </div>
+            </div>;
+          })}
+          <div ref={endRef}/>
+        </div>
+        <div style={{padding:"11px 13px",background:"#16181f",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:7}}>
+          <input ref={fileRef} type="file" style={{display:"none"}} onChange={handleFile}/>
+          <button onClick={()=>fileRef.current?.click()} style={{width:34,height:34,borderRadius:9,background:"#1e2028",border:"1px solid rgba(255,255,255,0.07)",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>📎</button>
+          <input ref={inputRef} value={txt} onChange={e=>setTxt(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(txt);}}}
+            placeholder={`Message à ${activeOther?.name||"..."}…`}
+            style={{flex:1,background:"#1e2028",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"9px 13px",color:"#f0f0f5",fontSize:14,outline:"none"}}
+            onFocus={ev=>ev.target.style.borderColor="rgba(108,99,255,0.4)"}
+            onBlur={ev=>ev.target.style.borderColor="rgba(255,255,255,0.07)"}/>
+          <button onClick={()=>sendMsg(txt)} disabled={!txt.trim()}
+            style={{width:36,height:36,borderRadius:10,background:txt.trim()?"#6c63ff":"#252830",border:"none",cursor:txt.trim()?"pointer":"default",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>➤</button>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+function App(){
+  const [user,setUser]=useState(undefined);
+  const [profile,setProfile]=useState(null);
+
+  useEffect(()=>{
+    return auth.onAuthStateChanged(async u=>{
+      setUser(u||null);
+      if(u){
+        const snap=await db.collection("users").doc(u.uid).get();
+        if(snap.exists)setProfile(snap.data());
+        await db.collection("users").doc(u.uid).update({online:true}).catch(()=>{});
+      }
+    });
+  },[]);
+
+  if(user===undefined)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0e0f13"}}>
+    <div style={{textAlign:"center"}}><div style={{fontSize:40,marginBottom:12}}>💬</div><p style={{color:"#9899a8"}}>Chargement uChat…</p></div>
+  </div>;
+  if(!user)return <AuthScreen/>;
+  return <ChatApp user={user} profile={profile}/>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
